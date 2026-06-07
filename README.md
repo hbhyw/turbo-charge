@@ -1,6 +1,4 @@
-# turbo-charge
-
-**开始上班，随缘更新**
+# turbo-charge fork
 
 酷安：[诺鸡鸭](https://www.coolapk.com/u/1145497)
 

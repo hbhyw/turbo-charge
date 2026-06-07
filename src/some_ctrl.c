@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <dirent.h>
+#include <unistd.h>
 
 #include "some_ctrl.h"
 #include "options_linkedlist.h"
@@ -13,9 +15,42 @@
 //阶梯充电的控制，1为开启0为关闭
 void step_charge_ctl(char *value)
 {
-    check_read_file("/sys/class/power_supply/battery/step_charging_enabled");
-    set_value("/sys/class/power_supply/battery/step_charging_enabled", value);
-    set_value("/sys/class/power_supply/battery/sw_jeita_enabled", value);
+    // 优先尝试默认路径
+    if(!access("/sys/class/power_supply/battery/step_charging_enabled", F_OK)) {
+        set_value("/sys/class/power_supply/battery/step_charging_enabled", value);
+        if(!access("/sys/class/power_supply/battery/sw_jeita_enabled", F_OK))
+            set_value("/sys/class/power_supply/battery/sw_jeita_enabled", value);
+        return;
+    }
+
+    // 在 /sys/class/power_supply 下查找兼容的 step_charging 文件
+    DIR *d;
+    struct dirent *ent;
+    char path[256];
+    char sw_path[256];
+    int found = 0;
+
+    d = opendir("/sys/class/power_supply");
+    if(d) {
+        while((ent = readdir(d)) != NULL) {
+            if(!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..")) continue;
+            snprintf(path, sizeof(path), "/sys/class/power_supply/%s/step_charging_enabled", ent->d_name);
+            if(!access(path, F_OK)) {
+                set_value(path, value);
+                snprintf(sw_path, sizeof(sw_path), "/sys/class/power_supply/%s/sw_jeita_enabled", ent->d_name);
+                if(!access(sw_path, F_OK)) set_value(sw_path, value);
+                found = 1;
+                break;
+            }
+        }
+        closedir(d);
+    }
+
+    if(!found) {
+        // 退回到默认路径以产生更明确的错误信息（check_read_file 会打印/退出）
+        check_read_file("/sys/class/power_supply/battery/step_charging_enabled");
+        set_value("/sys/class/power_supply/battery/step_charging_enabled", value);
+    }
 }
 
 //控制能否进行充电，1为充电0为暂停充电

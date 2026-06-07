@@ -233,15 +233,34 @@ void check_required_files(uchar *battery_status, uchar *battery_capacity, uchar 
         printf_with_time("目前已知的有关文件有：/sys/class/power_supply/battery/charging_enabled、/sys/class/power_supply/battery/battery_charging_enabled、/sys/class/power_supply/battery/input_suspend、/sys/class/qcom-battery/restricted_charging");
         printf_with_time("如果您知道其他的有关文件，请联系模块制作者！");
     }
-    if(access("/sys/class/power_supply/battery/step_charging_enabled", F_OK))
     {
-        *step_charge=0;
-        printf_with_time("由于找不到/sys/class/power_supply/battery/step_charging_enabled文件，阶梯式充电控制的所有功能失效！");
-    }
-    else if(!*battery_capacity)
-    {
-        *step_charge=2;
-        printf_with_time("由于找不到/sys/class/power_supply/battery/capacity文件，阶梯式充电无法根据电量进行开关，此时若在配置中关闭阶梯式充电，则无论电量多少，阶梯式充电都会关闭！");
+        /* 在 /sys/class/power_supply 下查找 step_charging_enabled，以兼容不同设备的电源节点名称 */
+        int found = 0;
+        DIR *d;
+        struct dirent *ent;
+        char path[256];
+        if(!access("/sys/class/power_supply/battery/step_charging_enabled", F_OK)) found = 1;
+        else {
+            d = opendir("/sys/class/power_supply");
+            if(d) {
+                while((ent = readdir(d)) != NULL) {
+                    if(!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..")) continue;
+                    snprintf(path, sizeof(path), "/sys/class/power_supply/%s/step_charging_enabled", ent->d_name);
+                    if(!access(path, F_OK)) { found = 1; break; }
+                }
+                closedir(d);
+            }
+        }
+        if(!found)
+        {
+            *step_charge=0;
+            printf_with_time("由于找不到/sys/class/power_supply/*/step_charging_enabled文件，阶梯式充电控制的所有功能失效！");
+        }
+        else if(!*battery_capacity)
+        {
+            *step_charge=2;
+            printf_with_time("由于找不到/sys/class/power_supply/battery/capacity文件，阶梯式充电无法根据电量进行开关，此时若在配置中关闭阶梯式充电，则无论电量多少，阶梯式充电都会关闭！");
+        }
     }
     //通过字符串后缀匹配来查找相应文件
     power_supply_dir=(char **)my_calloc(1, sizeof(char *));
